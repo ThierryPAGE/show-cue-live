@@ -17,6 +17,13 @@ export default function LiveProjector() {
   const isTransitioningRef = useRef(false);
   const autoplayNextRef = useRef(false);
   const currentCueIndexRef = useRef(0);
+  // Refs to always have fresh data in BroadcastChannel handler
+  const cuesRef = useRef([]);
+  const safetyImageUrlRef = useRef("");
+
+  // Keep refs in sync with state
+  useEffect(() => { cuesRef.current = cues; }, [cues]);
+  useEffect(() => { safetyImageUrlRef.current = safetyImageUrl; }, [safetyImageUrl]);
 
   // Preload next cue
   const preloadNext = useCallback((idx) => {
@@ -26,7 +33,7 @@ export default function LiveProjector() {
       preloadRef.current = null;
     }
 
-    const next = cues[idx];
+    const next = cuesRef.current[idx];
     if (!next || !next.file_url) return;
 
     if (next.type === "VIDEO") {
@@ -41,7 +48,7 @@ export default function LiveProjector() {
       img.src = next.file_url;
       preloadRef.current = img;
     }
-  }, [cues]);
+  }, []);
 
   useEffect(() => {
     if (cues.length > 0) {
@@ -50,11 +57,11 @@ export default function LiveProjector() {
   }, [cueIndex, cues, preloadNext]);
 
   const showSafety = useCallback(() => {
-    if (safetyImageUrl) {
-      playerRef.current?.showSafetyImage(safetyImageUrl);
+    if (safetyImageUrlRef.current) {
+      playerRef.current?.showSafetyImage(safetyImageUrlRef.current);
     }
     setStatus("INTERLUDE");
-  }, [safetyImageUrl]);
+  }, []);
 
   const executeCue = useCallback(async (index) => {
     // Prevent concurrent transitions
@@ -63,7 +70,7 @@ export default function LiveProjector() {
       return;
     }
 
-    const cue = cues[index];
+    const cue = cuesRef.current[index];
     if (!cue) return;
 
     isTransitioningRef.current = true;
@@ -95,7 +102,7 @@ export default function LiveProjector() {
     } finally {
       isTransitioningRef.current = false;
     }
-  }, [cues, showSafety]);
+  }, [showSafety]);
 
   useEffect(() => {
     if (status === "ERROR" && safetyImageUrl) {
@@ -113,6 +120,7 @@ export default function LiveProjector() {
 
     channel.onmessage = async (event) => {
       const { action, payload } = event.data;
+      const currentCues = cuesRef.current;
 
       switch (action) {
         case "INIT":
@@ -127,27 +135,25 @@ export default function LiveProjector() {
           break;
 
         case "START":
-          if (cues.length > 0) {
+          if (currentCues.length > 0) {
             setStarted(true);
             await executeCue(0);
           }
           break;
 
-        case "SPACE":
-          const cue = cues[payload.cueIndex];
+        case "SPACE": {
+          const cue = currentCues[payload.cueIndex];
           if (!cue) break;
 
           if (cue.type === "VIDEO") {
             if (payload.status === "PLAYING") {
-              // Go to next cue
               const nextIdx = payload.cueIndex + 1;
-              if (nextIdx < cues.length) {
+              if (nextIdx < currentCues.length) {
                 await executeCue(nextIdx);
               } else {
                 showSafety();
               }
             } else {
-              // Play/resume current video
               if (cue.file_url) {
                 const success = await playerRef.current?.playVideo(cue.file_url, cue.fadeInMs || 1200, cue.loop || false);
                 if (!success) showSafety();
@@ -155,11 +161,12 @@ export default function LiveProjector() {
             }
           } else if (cue.type === "IMAGE") {
             const nextIdx = payload.cueIndex + 1;
-            if (nextIdx < cues.length) {
+            if (nextIdx < currentCues.length) {
               await executeCue(nextIdx);
             }
           }
           break;
+        }
 
         case "NEXT":
           await executeCue(payload.cueIndex + 1);
@@ -176,7 +183,7 @@ export default function LiveProjector() {
     };
 
     return () => channel.close();
-  }, [cues, executeCue, showSafety]);
+  }, [executeCue, showSafety]);
 
   // Send status updates back to control
   useEffect(() => {
@@ -192,14 +199,14 @@ export default function LiveProjector() {
   const handleVideoEnded = useCallback(() => {
     if (autoplayNextRef.current) {
       const nextIdx = currentCueIndexRef.current + 1;
-      if (nextIdx < cues.length) {
+      if (nextIdx < cuesRef.current.length) {
         executeCue(nextIdx);
       } else {
         showSafety();
       }
       autoplayNextRef.current = false;
     }
-  }, [cues.length, executeCue, showSafety]);
+  }, [executeCue, showSafety]);
 
   if (loading) {
     return (
