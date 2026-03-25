@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -10,7 +10,7 @@ import {
   Film,
   Image,
   Upload,
-  Save,
+  Check,
   Zap,
   PlayCircle,
   Loader2,
@@ -27,13 +27,18 @@ export default function Setup() {
   const [cues, setCues] = useState([]);
   const [safetyImageUrl, setSafetyImageUrl] = useState("");
   const [showId, setShowId] = useState(null);
-  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("idle"); // "idle" | "saving" | "saved" | "error"
   const [loading, setLoading] = useState(true);
   const [editDialog, setEditDialog] = useState({ open: false, cue: null, index: -1 });
   const [uploadingSafety, setUploadingSafety] = useState(false);
   const [testRunning, setTestRunning] = useState(false);
   const [testIndex, setTestIndex] = useState(-1);
   const [medias, setMedias] = useState([]);
+
+  const showIdRef = useRef(null);
+  const isInitialized = useRef(false);
+  const debounceTimer = useRef(null);
+  const savedTimer = useRef(null);
 
   // Load existing show and medias
   useEffect(() => {
@@ -43,11 +48,11 @@ export default function Setup() {
           base44.entities.Show.list("-updated_date", 1),
           base44.entities.Media.list("-created_date", 100),
         ]);
-        
+
         if (shows.length > 0) {
           const show = shows[0];
+          showIdRef.current = show.id;
           setShowId(show.id);
-          // Migrer les cues existants pour ajouter les propriétés loop et autoplayNext
           const migratedCues = (show.cues || []).map(cue => ({
             ...cue,
             loop: cue.loop !== undefined ? cue.loop : false,
@@ -55,25 +60,49 @@ export default function Setup() {
           }));
           setCues(migratedCues);
           setSafetyImageUrl(show.safety_image_url || "");
-          
-          // Sauvegarder automatiquement si migration effectuée
-          const needsMigration = (show.cues || []).some(cue => 
-            cue.loop === undefined || cue.autoplayNext === undefined
-          );
-          if (needsMigration && migratedCues.length > 0) {
-            await base44.entities.Show.update(show.id, {
-              ...show,
-              cues: migratedCues
-            });
-          }
         }
         setMedias(mediaList);
       } catch (error) {
         console.error("Error loading data:", error);
       }
       setLoading(false);
+      // Marquer comme initialisé après le premier rendu post-chargement
+      setTimeout(() => { isInitialized.current = true; }, 0);
     })();
   }, []);
+
+  // Auto-save avec debounce de 1.5s
+  useEffect(() => {
+    if (!isInitialized.current) return;
+
+    clearTimeout(debounceTimer.current);
+    clearTimeout(savedTimer.current);
+    setSaveStatus("idle");
+
+    debounceTimer.current = setTimeout(async () => {
+      setSaveStatus("saving");
+      try {
+        const data = { title: "Concert Show", safety_image_url: safetyImageUrl, cues };
+        if (showIdRef.current) {
+          await base44.entities.Show.update(showIdRef.current, data);
+        } else {
+          const created = await base44.entities.Show.create(data);
+          showIdRef.current = created.id;
+          setShowId(created.id);
+        }
+        setSaveStatus("saved");
+        savedTimer.current = setTimeout(() => setSaveStatus("idle"), 2000);
+      } catch (err) {
+        console.error("Auto-save error:", err);
+        setSaveStatus("error");
+      }
+    }, 1500);
+
+    return () => {
+      clearTimeout(debounceTimer.current);
+      clearTimeout(savedTimer.current);
+    };
+  }, [cues, safetyImageUrl]);
 
   const handleDragEnd = (result) => {
     if (!result.destination) return;
@@ -149,21 +178,6 @@ export default function Setup() {
     setUploadingSafety(false);
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    const data = {
-      title: "Concert Show",
-      safety_image_url: safetyImageUrl,
-      cues,
-    };
-    if (showId) {
-      await base44.entities.Show.update(showId, data);
-    } else {
-      const created = await base44.entities.Show.create(data);
-      setShowId(created.id);
-    }
-    setSaving(false);
-  };
 
   // Test Run
   useEffect(() => {
@@ -207,15 +221,25 @@ export default function Setup() {
             <h1 className="text-3xl font-bold tracking-tight text-white">Concert Video Cue</h1>
             <p className="text-sm text-zinc-500 mt-1">Setup your show timeline</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={handleSave}
-              disabled={saving}
-              className="bg-white text-black hover:bg-zinc-200 gap-2"
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Save
-            </Button>
+          <div className="flex items-center gap-3">
+            {/* Indicateur auto-save */}
+            <div className="text-sm flex items-center gap-1.5 min-w-[90px] justify-end">
+              {saveStatus === "saving" && (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400" />
+                  <span className="text-zinc-400">Saving…</span>
+                </>
+              )}
+              {saveStatus === "saved" && (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-emerald-400">Saved</span>
+                </>
+              )}
+              {saveStatus === "error" && (
+                <span className="text-red-400">Save failed</span>
+              )}
+            </div>
             <Link to={createPageUrl("LiveControl")}>
               <Button className="bg-emerald-600 hover:bg-emerald-500 text-white gap-2">
                 <Zap className="w-4 h-4" />
