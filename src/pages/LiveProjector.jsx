@@ -36,6 +36,11 @@ export default function LiveProjector() {
     const next = cuesRef.current[idx];
     if (!next || !next.file_url) return;
 
+    // idb:// URLs are already local — no HTTP prefetch needed
+    if (next.file_url.startsWith('idb://')) return;
+    // blob: URLs from another window are invalid — skip
+    if (next.file_url.startsWith('blob:')) return;
+
     if (next.type === "VIDEO") {
       const link = document.createElement("link");
       link.rel = "prefetch";
