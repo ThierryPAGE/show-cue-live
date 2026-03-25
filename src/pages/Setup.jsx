@@ -18,6 +18,7 @@ import {
 import CueItem from "@/components/CueItem";
 import CueEditDialog from "@/components/CueEditDialog";
 import MediaLibrary from "@/components/MediaLibrary";
+import { resolveMediaUrl } from "@/lib/mediaStore";
 
 function generateId() {
   return Math.random().toString(36).substring(2, 10);
@@ -34,6 +35,16 @@ export default function Setup() {
   const [testRunning, setTestRunning] = useState(false);
   const [testIndex, setTestIndex] = useState(-1);
   const [medias, setMedias] = useState([]);
+
+  const [safetyImagePreview, setSafetyImagePreview] = useState("");
+
+  // Résoudre l'URL idb:// en blob URL pour la preview
+  useEffect(() => {
+    if (!safetyImageUrl) { setSafetyImagePreview(""); return; }
+    resolveMediaUrl(safetyImageUrl)
+      .then(setSafetyImagePreview)
+      .catch(() => setSafetyImagePreview(""));
+  }, [safetyImageUrl]);
 
   const showIdRef = useRef(null);
   const isInitialized = useRef(false);
@@ -262,8 +273,8 @@ export default function Setup() {
               </span>
               <input type="file" accept="image/*" onChange={handleSafetyUpload} className="hidden" />
             </label>
-            {safetyImageUrl && (
-              <img src={safetyImageUrl} alt="Safety" className="w-16 h-10 object-cover rounded border border-zinc-600" />
+            {safetyImagePreview && (
+              <img src={safetyImagePreview} alt="Safety" className="w-16 h-10 object-cover rounded border border-zinc-600" />
             )}
           </div>
         </div>
