@@ -19,6 +19,9 @@ const LivePlayer = forwardRef(function LivePlayer({ onStatusChange, onLog, onVid
   const [imageZIndex, setImageZIndex] = useState(2);
   const loadingTimerRef = useRef(null);
   const currentCueRef = useRef(null);
+  // Blob URL tracking pour éviter les memory leaks
+  const currentImageUrlRef = useRef(null);
+  const currentVideoUrlRefs = useRef({ 1: null, 2: null });
 
   const log = useCallback((msg, level = "info") => {
     onLog?.({ message: msg, level, time: new Date().toLocaleTimeString() });
@@ -31,15 +34,28 @@ const LivePlayer = forwardRef(function LivePlayer({ onStatusChange, onLog, onVid
     }
   }, []);
 
-  // Cleanup on unmount
+  const revokeBlobUrl = (url) => {
+    if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
+  };
+
+  // Cleanup complet à l'unmount
   useEffect(() => {
-    return () => clearLoadingTimer();
+    return () => {
+      clearLoadingTimer();
+      revokeBlobUrl(currentImageUrlRef.current);
+      revokeBlobUrl(currentVideoUrlRefs.current[1]);
+      revokeBlobUrl(currentVideoUrlRefs.current[2]);
+    };
   }, [clearLoadingTimer]);
 
   useImperativeHandle(ref, () => ({
     async showImage(rawUrl, fadeMs = 800) {
       const url = await resolveMediaUrl(rawUrl);
       clearLoadingTimer();
+
+      // Révoquer l'ancienne image blob URL après le fade
+      const prevImageUrl = currentImageUrlRef.current;
+      currentImageUrlRef.current = url;
 
       // Hide videos smoothly first
       const v1 = video1Ref.current;
@@ -53,7 +69,7 @@ const LivePlayer = forwardRef(function LivePlayer({ onStatusChange, onLog, onVid
         setVideo2Opacity(0);
         setVideo2ZIndex(1);
       }
-      
+
       // Show image
       setImageSrc(url);
       setImageTransitionMs(fadeMs);
@@ -68,7 +84,7 @@ const LivePlayer = forwardRef(function LivePlayer({ onStatusChange, onLog, onVid
       
       log(`Show image (fade ${fadeMs}ms)`);
       
-      // Clean up video after fade completes
+      // Clean up video + révoquer ancienne image blob URL après le fade
       setTimeout(() => {
         if (v1) {
           v1.pause();
@@ -83,6 +99,7 @@ const LivePlayer = forwardRef(function LivePlayer({ onStatusChange, onLog, onVid
           v2.currentTime = 0;
         }
         setActiveVideo(null);
+        revokeBlobUrl(prevImageUrl);
       }, fadeMs + 50);
       
       return new Promise((resolve) => {
@@ -105,6 +122,9 @@ const LivePlayer = forwardRef(function LivePlayer({ onStatusChange, onLog, onVid
     async showSafetyImage(rawUrl) {
       const url = await resolveMediaUrl(rawUrl).catch(() => rawUrl);
       clearLoadingTimer();
+      // Révoquer l'ancienne image blob URL immédiatement (pas de fade)
+      revokeBlobUrl(currentImageUrlRef.current);
+      currentImageUrlRef.current = url;
       setImageSrc(url);
       setImageTransitionMs(0);
       setImageOpacity(1);
@@ -147,6 +167,8 @@ const LivePlayer = forwardRef(function LivePlayer({ onStatusChange, onLog, onVid
       newV.load();
 
       currentCueRef.current = url;
+      // Tracker la nouvelle URL blob pour cette piste vidéo
+      currentVideoUrlRefs.current[newVideoNum] = url;
 
       // Prepare new video above and ready to appear
       if (newVideoNum === 1) {
@@ -218,13 +240,15 @@ const LivePlayer = forwardRef(function LivePlayer({ onStatusChange, onLog, onVid
             }
           }
 
-          // Clean up old video after crossfade
+          // Clean up old video after crossfade + révoquer son blob URL
           setTimeout(() => {
             if (oldV && prevActiveVideoNum !== null) {
               oldV.pause();
               oldV.removeAttribute("src");
               oldV.load();
               oldV.currentTime = 0;
+              revokeBlobUrl(currentVideoUrlRefs.current[prevActiveVideoNum]);
+              currentVideoUrlRefs.current[prevActiveVideoNum] = null;
               log(`Video ${prevActiveVideoNum} released after crossfade`);
             }
             resolve(true);
@@ -279,7 +303,7 @@ const LivePlayer = forwardRef(function LivePlayer({ onStatusChange, onLog, onVid
       clearLoadingTimer();
       const v1 = video1Ref.current;
       const v2 = video2Ref.current;
-      
+
       if (v1) {
         v1.pause();
         v1.removeAttribute("src");
@@ -292,7 +316,14 @@ const LivePlayer = forwardRef(function LivePlayer({ onStatusChange, onLog, onVid
         v2.load();
         v2.currentTime = 0;
       }
-      
+
+      // Révoquer toutes les blob URLs trackées
+      revokeBlobUrl(currentVideoUrlRefs.current[1]);
+      revokeBlobUrl(currentVideoUrlRefs.current[2]);
+      revokeBlobUrl(currentImageUrlRef.current);
+      currentVideoUrlRefs.current = { 1: null, 2: null };
+      currentImageUrlRef.current = null;
+
       setVideo1Opacity(0);
       setVideo2Opacity(0);
       setVideo1ZIndex(1);

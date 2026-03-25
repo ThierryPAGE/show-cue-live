@@ -38,12 +38,30 @@ export default function Setup() {
 
   const [safetyImagePreview, setSafetyImagePreview] = useState("");
 
-  // Résoudre l'URL idb:// en blob URL pour la preview
+  // Résoudre l'URL idb:// en blob URL pour la preview + révoquer l'ancienne
+  const safetyPreviewBlobRef = useRef(null);
   useEffect(() => {
-    if (!safetyImageUrl) { setSafetyImagePreview(""); return; }
+    if (!safetyImageUrl) {
+      if (safetyPreviewBlobRef.current) {
+        URL.revokeObjectURL(safetyPreviewBlobRef.current);
+        safetyPreviewBlobRef.current = null;
+      }
+      setSafetyImagePreview("");
+      return;
+    }
     resolveMediaUrl(safetyImageUrl)
-      .then(setSafetyImagePreview)
+      .then(url => {
+        if (safetyPreviewBlobRef.current) URL.revokeObjectURL(safetyPreviewBlobRef.current);
+        safetyPreviewBlobRef.current = url.startsWith('blob:') ? url : null;
+        setSafetyImagePreview(url);
+      })
       .catch(() => setSafetyImagePreview(""));
+    return () => {
+      if (safetyPreviewBlobRef.current) {
+        URL.revokeObjectURL(safetyPreviewBlobRef.current);
+        safetyPreviewBlobRef.current = null;
+      }
+    };
   }, [safetyImageUrl]);
 
   const showIdRef = useRef(null);

@@ -147,28 +147,34 @@ export default function LiveProjector() {
           break;
 
         case "SPACE": {
-          const cue = currentCues[payload.cueIndex];
-          if (!cue) break;
+          try {
+            const cue = currentCues[payload.cueIndex];
+            if (!cue) break;
 
-          if (cue.type === "VIDEO") {
-            if (payload.status === "PLAYING") {
+            if (cue.type === "VIDEO") {
+              if (payload.status === "PLAYING") {
+                const nextIdx = payload.cueIndex + 1;
+                if (nextIdx < currentCues.length) {
+                  await executeCue(nextIdx);
+                } else {
+                  showSafety();
+                }
+              } else {
+                if (cue.file_url) {
+                  const success = await playerRef.current?.playVideo(cue.file_url, cue.fadeInMs || 1200, cue.loop || false);
+                  if (!success) showSafety();
+                }
+              }
+            } else if (cue.type === "IMAGE") {
               const nextIdx = payload.cueIndex + 1;
               if (nextIdx < currentCues.length) {
                 await executeCue(nextIdx);
-              } else {
-                showSafety();
-              }
-            } else {
-              if (cue.file_url) {
-                const success = await playerRef.current?.playVideo(cue.file_url, cue.fadeInMs || 1200, cue.loop || false);
-                if (!success) showSafety();
               }
             }
-          } else if (cue.type === "IMAGE") {
-            const nextIdx = payload.cueIndex + 1;
-            if (nextIdx < currentCues.length) {
-              await executeCue(nextIdx);
-            }
+          } catch (err) {
+            console.error("SPACE handler error:", err);
+            isTransitioningRef.current = false;
+            showSafety();
           }
           break;
         }
@@ -187,6 +193,8 @@ export default function LiveProjector() {
           setCueIndex(0);
           setStatus("IDLE");
           setStarted(false);
+          currentCueIndexRef.current = 0;
+          autoplayNextRef.current = false;
           isTransitioningRef.current = false;
           break;
       }
