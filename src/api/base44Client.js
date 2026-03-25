@@ -1,4 +1,6 @@
 // Local store replacing @base44/sdk — no backend required
+import { storeBlob } from '../lib/mediaStore';
+
 const SHOW_KEY = 'scl-show';
 const MEDIA_KEY = 'scl-media';
 
@@ -61,8 +63,8 @@ export const base44 = {
   integrations: {
     Core: {
       UploadFile: async ({ file }) => {
-        const file_url = URL.createObjectURL(file);
-        return { file_url };
+        const id = await storeBlob(file);
+        return { file_url: `idb://${id}` };
       },
     },
   },

@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef, useState, useCallback } from "react";
+import { resolveMediaUrl } from "../lib/mediaStore";
 
 const LOADING_TIMEOUT = 20000;
 
@@ -36,9 +37,10 @@ const LivePlayer = forwardRef(function LivePlayer({ onStatusChange, onLog, onVid
   }, [clearLoadingTimer]);
 
   useImperativeHandle(ref, () => ({
-    showImage(url, fadeMs = 800) {
+    async showImage(rawUrl, fadeMs = 800) {
+      const url = await resolveMediaUrl(rawUrl);
       clearLoadingTimer();
-      
+
       // Hide videos smoothly first
       const v1 = video1Ref.current;
       const v2 = video2Ref.current;
@@ -120,7 +122,8 @@ const LivePlayer = forwardRef(function LivePlayer({ onStatusChange, onLog, onVid
       log("⚠ Safety image displayed", "warn");
     },
 
-    async playVideo(url, fadeMs = 1200, loop = false) {
+    async playVideo(rawUrl, fadeMs = 1200, loop = false) {
+      const url = await resolveMediaUrl(rawUrl);
       clearLoadingTimer();
       onStatusChange?.("LOADING");
       log(`Loading video...`);
