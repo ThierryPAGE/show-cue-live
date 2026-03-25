@@ -111,6 +111,10 @@ export default function Setup() {
     setCues((prev) => [...prev, newCue]);
   };
 
+  const renameCue = (index, newTitle) => {
+    setCues((prev) => prev.map((c, i) => (i === index ? { ...c, title: newTitle } : c)));
+  };
+
   const duplicateCue = (index) => {
     const orig = cues[index];
     const dup = { ...orig, id: generateId() };
@@ -317,6 +321,7 @@ export default function Setup() {
                             index={index}
                             onDuplicate={duplicateCue}
                             onDelete={deleteCue}
+                            onTitleChange={(newTitle) => renameCue(index, newTitle)}
                             isActive={testRunning && testIndex === index}
                           />
                         </div>
