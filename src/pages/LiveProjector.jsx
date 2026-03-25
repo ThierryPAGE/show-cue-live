@@ -182,7 +182,12 @@ export default function LiveProjector() {
           break;
 
         case "RELOAD":
-          await executeCue(payload.cueIndex);
+          // Remettre au début : stop tout, overlay affiché, cue 0 prêt
+          playerRef.current?.releaseVideo();
+          setCueIndex(0);
+          setStatus("IDLE");
+          setStarted(false);
+          isTransitioningRef.current = false;
           break;
       }
     };

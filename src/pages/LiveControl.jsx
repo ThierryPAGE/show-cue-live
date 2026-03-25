@@ -184,9 +184,13 @@ export default function LiveControl() {
   }, [cueIndex, sendCommand, addLog]);
 
   const handleReload = useCallback(() => {
-    sendCommand("RELOAD", { cueIndex });
-    addLog({ message: `Reload cue ${cueIndex + 1}`, level: "info", time: new Date().toLocaleTimeString() });
-  }, [cueIndex, sendCommand, addLog]);
+    sendCommand("RELOAD", {});
+    // Remettre l'état local au début
+    setCueIndex(0);
+    setStarted(false);
+    setStatus("IDLE");
+    addLog({ message: "↩ Reset → cue 1 (début)", level: "info", time: new Date().toLocaleTimeString() });
+  }, [sendCommand, addLog]);
 
   // Keyboard
   useEffect(() => {
