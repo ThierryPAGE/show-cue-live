@@ -102,7 +102,8 @@ const LivePlayer = forwardRef(function LivePlayer({ onStatusChange, onLog, onVid
       log("Image hidden");
     },
 
-    showSafetyImage(url) {
+    async showSafetyImage(rawUrl) {
+      const url = await resolveMediaUrl(rawUrl).catch(() => rawUrl);
       clearLoadingTimer();
       setImageSrc(url);
       setImageTransitionMs(0);
@@ -158,14 +159,17 @@ const LivePlayer = forwardRef(function LivePlayer({ onStatusChange, onLog, onVid
         setVideo2TransitionMs(fadeMs);
       }
 
-      loadingTimerRef.current = setTimeout(() => {
-        if (currentCueRef.current === url) {
-          log("Video load timeout (8s)", "error");
-          onStatusChange?.("ERROR");
-        }
-      }, LOADING_TIMEOUT);
-
       return new Promise((resolve) => {
+        loadingTimerRef.current = setTimeout(() => {
+          if (currentCueRef.current === url) {
+            log("Video load timeout", "error");
+            onStatusChange?.("ERROR");
+            newV.removeEventListener("canplay", onCanPlay);
+            newV.removeEventListener("error", onError);
+            resolve(false);
+          }
+        }, LOADING_TIMEOUT);
+
         const onCanPlay = async () => {
           newV.removeEventListener("canplay", onCanPlay);
           newV.removeEventListener("error", onError);
